@@ -9,7 +9,11 @@ export TARGETARCH=${TARGETARCH:=$(dpkg --print-architecture)}
 : "${FFMPEG_SHA256:=$(jq -cr '.sha256[$ENV.TARGETARCH]' ffmpeg.json)}"
 echo "$FFMPEG_SHA256  jellyfin-ffmpeg7_${FFMPEG_VERSION}-${VERSION_CODENAME}_${TARGETARCH}.deb" > ffmpeg.sha256
 
-wget -nv "https://github.com/jellyfin/jellyfin-ffmpeg/releases/download/v${FFMPEG_VERSION}/jellyfin-ffmpeg7_${FFMPEG_VERSION}-${VERSION_CODENAME}_${TARGETARCH}.deb"
+BASE_URL=https://github.com/jellyfin/jellyfin-ffmpeg
+if [[ "${TARGETARCH}" == "loong64" ]]; then
+  BASE_URL="https://github.com/loong64/jellyfin-ffmpeg"
+fi
+wget -nv "${BASE_URL}/releases/download/v${FFMPEG_VERSION}/jellyfin-ffmpeg7_${FFMPEG_VERSION}-${VERSION_CODENAME}_${TARGETARCH}.deb"
 sha256sum -c ffmpeg.sha256
 apt-get -yqq -f install "./jellyfin-ffmpeg7_${FFMPEG_VERSION}-${VERSION_CODENAME}_${TARGETARCH}.deb"
 rm "jellyfin-ffmpeg7_${FFMPEG_VERSION}-${VERSION_CODENAME}_${TARGETARCH}.deb"
