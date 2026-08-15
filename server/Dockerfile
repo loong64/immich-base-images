@@ -1,6 +1,6 @@
 ARG DEBIAN_RELEASE=trixie
 
-FROM node:24.14.1-${DEBIAN_RELEASE}-slim@sha256:9707cd4542f400df5078df04f9652a272429112f15202d22b5b8bdd148df494f AS base
+FROM ghcr.io/loong64/node:24.14.1-${DEBIAN_RELEASE}-slim AS base
 ARG DEBIAN_FRONTEND=noninteractive
 ARG DEBIAN_RELEASE
 ENV DEBIAN_RELEASE=${DEBIAN_RELEASE}
@@ -152,7 +152,7 @@ RUN jq -n \
   '{sources: $sources[0], packages: $packages[0]}' \
   > /build/build-lock.json
 
-FROM node:24.14.1-${DEBIAN_RELEASE}-slim@sha256:9707cd4542f400df5078df04f9652a272429112f15202d22b5b8bdd148df494f AS prod
+FROM ghcr.io/loong64/node:24.14.1-${DEBIAN_RELEASE}-slim AS prod
 ARG DEBIAN_FRONTEND=noninteractive
 ARG DEBIAN_RELEASE
 ENV DEBIAN_RELEASE=${DEBIAN_RELEASE}

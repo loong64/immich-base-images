@@ -73,7 +73,6 @@ jobs:
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4 # v4.3.0
-        if: ${{ !github.event.pull_request.head.repo.fork }}
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -133,7 +132,7 @@ jobs:
             # Disable latest tag
             latest=false
           images: |
-            name=ghcr.io/${{ github.repository_owner }}/postgres
+            name=ghcr.io/${{ github.repository_owner }}/immich-app/postgres
           tags: |
             type=raw,value=${{ matrix.pg }}-vectorchord${{ matrix.vectorchord }}-pgvector${{ matrix.pgvector }}-pgvectors${{ matrix.pgvectors }},enable=${{ matrix.pgvectors != '' }}
             type=raw,value=${{ matrix.pg }}-vectorchord${{ matrix.vectorchord }}-pgvectors${{ matrix.pgvectors }},enable=${{matrix.pgvectors != '' && matrix.pgvector == fromJson(steps.latest-pgvector.outputs.result) }}
