@@ -51,7 +51,8 @@ jobs:
       actions: read
       packages: write
     with:
-      image: base-server-${{ matrix.target }}
+      image: immich-app/base-server-${{ matrix.target }}
+      platforms: linux/loong64
       context: server
       dockerfile: server/Dockerfile
       target: ${{ matrix.target }}

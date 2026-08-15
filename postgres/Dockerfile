@@ -1,7 +1,7 @@
 ARG PG_MAJOR
 ARG PGVECTOR_TAG
 
-FROM pgvector/pgvector:${PGVECTOR_TAG}-pg${PG_MAJOR}
+FROM ghcr.io/loong64/pgvector/pgvector:${PGVECTOR_TAG}-pg${PG_MAJOR}
 
 ARG PG_MAJOR
 ARG VECTORCHORD_TAG
@@ -12,9 +12,9 @@ ENV DB_STORAGE_TYPE=SSD
 
 RUN apt-get update && \
     apt-get install -y wget && \
-    wget -nv -O /tmp/vchord.deb https://github.com/tensorchord/VectorChord/releases/download/$VECTORCHORD_TAG/postgresql-${PG_MAJOR%.*}-vchord_${VECTORCHORD_TAG#"v"}-1_${TARGETARCH}.deb && \
+    wget -nv -O /tmp/vchord.deb https://github.com/loong64/VectorChord/releases/download/$VECTORCHORD_TAG/postgresql-${PG_MAJOR%.*}-vchord_${VECTORCHORD_TAG#"v"}-1_${TARGETARCH}.deb && \
     if [ -n "$PGVECTORS_TAG" ]; then \
-        wget -nv -O /tmp/pgvectors.deb https://github.com/tensorchord/pgvecto.rs/releases/download/v$PGVECTORS_TAG/vectors-pg${PG_MAJOR%.*}_${PGVECTORS_TAG#"v"}_${TARGETARCH}$(if [ "$PGVECTORS_TAG" = '0.3.0' ]; then echo "_vectors"; fi).deb; \
+        wget -nv -O /tmp/pgvectors.deb https://github.com/loong64/pgvecto.rs/releases/download/v$PGVECTORS_TAG/vectors-pg${PG_MAJOR%.*}_${PGVECTORS_TAG#"v"}_${TARGETARCH}$(if [ "$PGVECTORS_TAG" = '0.3.0' ]; then echo "_vectors"; fi).deb; \
         apt-get install -y /tmp/pgvectors.deb; \
         rm -f /tmp/pgvectors.deb; \
     fi && \
