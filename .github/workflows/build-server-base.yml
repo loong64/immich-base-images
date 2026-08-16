@@ -1,6 +1,7 @@
 name: Build and Push Server Base Images
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - "*"
