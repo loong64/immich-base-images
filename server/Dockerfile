@@ -1,4 +1,4 @@
-FROM node:24.18.0-trixie-slim@sha256:ae91dcc111a68c9d2d81ff2a17bda61be126426176fde6fe7d08ab13b7f50573 AS base
+FROM node:24.21.0-trixie-slim@sha256:8ec5d7557396cfe32d21c3f9c13072355ceab22b584578ca4bb28af31120cffe AS base
 ARG DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /usr/src/app
@@ -8,15 +8,15 @@ ENV LD_LIBRARY_PATH=/usr/local/lib \
 
 COPY configure-apt.sh ./
 
+RUN mkdir -p /usr/share/postgresql-common/pgdg
+
+ADD --chmod=644 https://www.postgresql.org/media/keys/ACCC4CF8.asc /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+
 # Install ca-certificates first, then setup PostgreSQL repository
 RUN ./configure-apt.sh && \
   apt-get update && \
   apt-get install --no-install-recommends -yqq ca-certificates && \
-  mkdir -p /usr/share/postgresql-common/pgdg
-
-ADD --chmod=644 https://www.postgresql.org/media/keys/ACCC4CF8.asc /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
-
-RUN . /etc/os-release && \
+  . /etc/os-release && \
   echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" > /etc/apt/sources.list.d/pgdg.list && \
   apt-get update && \
   apt-get install --no-install-recommends -yqq \
@@ -36,9 +36,10 @@ RUN . /etc/os-release && \
   libglib2.0-dev \
   libgsf-1-dev \
   libmimalloc3 \
-  # libjpeg62-turbo-dev is just for building libvips; the final image uses jpegli (/usr/local/lib/libjpeg.so.62) built alongside libjxl
+  # libjpeg62-turbo-dev is just for building libvips; the final image uses jpegli (/usr/local/lib/libjpeg.so.62)
   libjpeg62-turbo-dev \
   liblcms2-dev \
+  libopenjp2-7-dev \
   librsvg2-dev \
   libspng-dev \
   meson \
@@ -69,7 +70,8 @@ RUN . /etc/os-release && \
   libhwy-dev \
   libwebp-dev \
   libio-compress-brotli-perl \
-  libaom-dev
+  libaom-dev && \
+  rm -rf /var/lib/apt/lists
 
 FROM base AS geodata
 
@@ -82,6 +84,12 @@ ADD --chmod=444 https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v
 RUN umask 0333 && unzip /build/geodata/cities500.zip -d /build/geodata/ && \
   rm /build/geodata/cities500.zip && date --iso-8601=seconds | tr -d "\n" > /build/geodata/geodata-date.txt
 
+FROM base AS jpegli
+
+COPY sources/jpegli.json sources/jpegli.sh ./
+COPY sources/jpegli-patches/ ./jpegli-patches/
+RUN ./jpegli.sh
+
 FROM base AS libheif
 
 COPY sources/libheif.json sources/libheif.sh ./
@@ -90,7 +98,6 @@ RUN ./libheif.sh
 FROM base AS libjxl
 
 COPY sources/libjxl.json sources/libjxl.sh ./
-COPY sources/libjxl-patches/ ./libjxl-patches/
 RUN ./libjxl.sh
 
 FROM base AS libraw
@@ -105,12 +112,14 @@ COPY --from=libheif /usr/local/include/libheif/ /usr/local/include/libheif/
 
 COPY --from=libjxl /usr/local/lib/ /usr/local/lib/libjxl/
 COPY --from=libjxl /usr/local/include/jxl/ /usr/local/include/jxl/
-COPY --from=libjxl /usr/local/include/jconfig.h /usr/local/include/jmorecfg.h /usr/local/include/jpeglib.h /usr/local/include/
 
-# COPY resolves symlinks unless copying the enclosing folder, so this is a workaround to get the correct result
-RUN cp -r /usr/local/lib/libheif/libheif* /usr/local/lib/libjxl/libjxl* /usr/local/lib/libjxl/libjpeg* /usr/local/lib && \
+COPY --from=jpegli /usr/local/lib/ /usr/local/lib/jpegli/
+COPY --from=jpegli /usr/local/include/jconfig.h /usr/local/include/jmorecfg.h /usr/local/include/jpeglib.h /usr/local/include/
+
+# COPY resolves symlinks unless copying the enclosing folder, so this is a workaround to get the correct result.
+RUN cp -r /usr/local/lib/libheif/libheif* /usr/local/lib/libjxl/libjxl* /usr/local/lib/jpegli/libjpeg.so* /usr/local/lib && \
   mv /usr/local/lib/libheif/pkgconfig/* /usr/local/lib/libjxl/pkgconfig/* /usr/local/lib/pkgconfig && \
-  rm -r /usr/local/lib/libheif /usr/local/lib/libjxl
+  rm -r /usr/local/lib/libheif /usr/local/lib/libjxl /usr/local/lib/jpegli
 
 COPY sources/imagemagick.json sources/imagemagick.sh ./
 RUN ./imagemagick.sh
@@ -124,7 +133,9 @@ RUN ./libvips.sh
 FROM base AS dev
 
 COPY packages/ffmpeg.json packages/ffmpeg.sh ./
-RUN ./ffmpeg.sh
+RUN apt-get update && \
+  ./ffmpeg.sh && \
+  rm -rf /var/lib/apt/lists
 
 COPY --from=base /usr/bin/tini /usr/bin/tini
 COPY --from=base /usr/bin/make /usr/bin/make
@@ -133,7 +144,7 @@ COPY --from=libvips /usr/local/bin/vips* /usr/local/bin/
 COPY --from=libvips /usr/local/include/vips/ /usr/local/include/vips/
 COPY --from=geodata /build/geodata /build/geodata
 
-ENV LD_LIBRARY_PATH=/usr/lib/jellyfin-ffmpeg/lib:/usr/lib/wsl/lib:$LD_LIBRARY_PATH
+ENV LD_LIBRARY_PATH=/usr/lib/wsl/lib
 
 RUN ldconfig /usr/local/lib
 
@@ -147,7 +158,7 @@ RUN jq -n \
   '{sources: $sources[0], packages: $packages[0]}' \
   > /build/build-lock.json
 
-FROM node:24.18.0-trixie-slim@sha256:ae91dcc111a68c9d2d81ff2a17bda61be126426176fde6fe7d08ab13b7f50573 AS prod
+FROM node:24.21.0-trixie-slim@sha256:8ec5d7557396cfe32d21c3f9c13072355ceab22b584578ca4bb28af31120cffe AS prod
 ARG DEBIAN_FRONTEND=noninteractive
 
 # renovate: datasource=custom.intel-igc depName=intel/intel-graphics-compiler
@@ -161,14 +172,14 @@ WORKDIR /build
 
 COPY configure-apt.sh packages/ffmpeg.json packages/ffmpeg.sh ./
 
-RUN ./configure-apt.sh && \
-  apt-get update && \
-  apt-get install curl ca-certificates --no-install-recommends -yqq && \
-  mkdir -p /usr/share/postgresql-common/pgdg
+RUN mkdir -p /usr/share/postgresql-common/pgdg
 
 ADD --chmod=644 https://www.postgresql.org/media/keys/ACCC4CF8.asc /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
 
-RUN . /etc/os-release && \
+RUN ./configure-apt.sh && \
+  apt-get update && \
+  apt-get install curl ca-certificates --no-install-recommends -yqq && \
+  . /etc/os-release && \
   echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" > /etc/apt/sources.list.d/pgdg.list && \
   apt-get update && \
   apt-get install --no-install-recommends -yqq \
@@ -187,9 +198,6 @@ RUN . /etc/os-release && \
   libopenjp2-7 \
   librsvg2-2 \
   libspng0 \
-  mesa-utils \
-  mesa-va-drivers \
-  mesa-vulkan-drivers \
   tini \
   wget \
   zlib1g \
@@ -219,8 +227,13 @@ RUN . /etc/os-release && \
   wget "https://github.com/intel/compute-runtime/releases/download/${CR_TAG}/intel-opencl-icd_${COMPUTE_RUNTIME_VERSION}_amd64.deb" &&  \
   # Shared libigdgmm1
   wget -nv "https://github.com/intel/compute-runtime/releases/download/${CR_TAG}/libigdgmm12_${GMMLIB_VERSION}_amd64.deb" && \
-  dpkg -i *.deb; \
+  dpkg -i *.deb && \
+  # intel-igc-opencl ships libopencl-clang.so and .so.14 as two identical files
+  ln -sf libopencl-clang.so.14 /usr/local/lib/libopencl-clang.so; \
   fi && \
+  # use shared libraries
+  (cd /usr/lib/jellyfin-ffmpeg/lib && \
+  rm -f libdav1d.so* libfontconfig.so* libfreetype.so* libfribidi.so* libharfbuzz.so* libigdgmm.so* libz.so*) && \
   apt-get install -t testing --no-install-recommends -yqq libmimalloc3 && \
   apt-get remove -yqq jq wget ca-certificates && \
   apt-get autoremove -yqq && \
@@ -237,8 +250,13 @@ RUN . /etc/os-release && \
 COPY --from=dev /usr/local/lib/ /usr/local/lib/
 COPY --from=dev /build/ /build/
 
+COPY policy.xml /etc/ImageMagick/policy.xml
+
 WORKDIR /usr/src/app
 
-ENV LD_LIBRARY_PATH=/usr/lib/jellyfin-ffmpeg/lib:/usr/lib/wsl/lib
+ENV LD_LIBRARY_PATH=/usr/lib/wsl/lib \
+  # jellyfin-ffmpeg keeps its Vulkan ICD manifests outside the loader's default search path
+  XDG_DATA_DIRS=/usr/lib/jellyfin-ffmpeg/share:/usr/local/share:/usr/share \
+  MAGICK_CONFIGURE_PATH=/etc/ImageMagick
 
 RUN ldconfig /usr/local/lib
